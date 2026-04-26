@@ -28,10 +28,10 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
-
-    raise NotImplementedError
-
-
+    from cs336_basics.nn import Linear
+    layer = Linear(d_in, d_out,device=in_features.device,dtype=in_features.dtype)
+    layer.load_state_dict({"weight": weights})
+    return layer(in_features)
 def run_embedding(
     vocab_size: int,
     d_model: int,
@@ -51,7 +51,10 @@ def run_embedding(
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
 
-    raise NotImplementedError
+    from cs336_basics.nn import Embedding
+    embedding=Embedding(vocab_size, d_model)
+    embedding.load_state_dict({"weight": weights})
+    return embedding(token_ids)
 
 
 def run_swiglu(
@@ -83,8 +86,12 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
-
+    from cs336_basics.nn import SwiGLU
+    model=SwiGLU(d_model, d_ff,device=in_features.device,dtype=in_features.dtype)
+    model.w1.weight.data=w1_weight
+    model.w2.weight.data=w2_weight
+    model.w3.weight.data=w3_weight
+    return model(in_features)
 
 def run_scaled_dot_product_attention(
     Q: Float[Tensor, " ... queries d_k"],
@@ -104,7 +111,8 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
+    from cs336_basics.nn import scaled_dot_product_attention
+    return scaled_dot_product_attention(Q, K, V, mask)
 
 
 def run_multihead_self_attention(
@@ -138,7 +146,20 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    from cs336_basics.nn import CausalSelfAttention
+    model=CausalSelfAttention(
+        d_model=d_model,
+        num_heads=num_heads,
+        theta=None,
+        max_seq_len=None,
+        device=in_features.device,
+        dtype=in_features.dtype,
+    )
+    model.q_proj.weight.data=q_proj_weight
+    model.k_proj.weight.data=k_proj_weight
+    model.v_proj.weight.data=v_proj_weight
+    model.output_proj.weight.data=o_proj_weight
+    return model(in_features)
 
 
 def run_multihead_self_attention_with_rope(
@@ -178,7 +199,23 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    from cs336_basics.nn import CausalSelfAttention
+    model=CausalSelfAttention(
+        d_model=d_model,
+        num_heads=num_heads,
+        max_seq_len=max_seq_len,
+        theta=theta,
+        device=in_features.device,
+        dtype=in_features.dtype,
+    )
+    model.q_proj.weight.data=q_proj_weight
+    model.k_proj.weight.data=k_proj_weight
+    model.v_proj.weight.data=v_proj_weight
+    model.output_proj.weight.data=o_proj_weight
+    if token_positions is None:
+        seq_len=in_features.shape(-2)
+        token_positions=torch.arange(seq_len,device=in_features.device).expand(in_features.shape[:-1])
+    return model(in_features,token_positions)
 
 
 def run_rope(
@@ -200,7 +237,14 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    raise NotImplementedError
+    from cs336_basics.nn import RotaryPositionalEmbedding
+    rope_module=RotaryPositionalEmbedding(
+        theta=theta,
+        d_k=d_k,
+        max_seq_len=max_seq_len,
+        device=in_query_or_key.device,
+    )
+    return rope_module(in_query_or_key,token_positions)
 
 
 def run_transformer_block(
@@ -273,8 +317,22 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
-
+    from cs336_basics.nn import TransformerBlock
+    block=TransformerBlock(d_model,num_heads,d_ff,max_seq_len,theta,device=in_features.device,dtype=in_features.dtype)
+    mapping={
+        "attn.q_proj.weight": block.attn.q_proj.weight,
+        "attn.k_proj.weight": block.attn.k_proj.weight,
+        "attn.v_proj.weight": block.attn.v_proj.weight,
+        "attn.output_proj.weight": block.attn.output_proj.weight,
+        "ln1.weight": block.ln1.weight,
+        "ffn.w1.weight": block.ffn.w1.weight,
+        "ffn.w2.weight": block.ffn.w2.weight,
+        "ffn.w3.weight": block.ffn.w3.weight,
+        "ln2.weight": block.ln2.weight,
+    }
+    for k,v in mapping.items():
+        v.data.copy_(weights[k])
+    return block(in_features)
 
 def run_transformer_lm(
     vocab_size: int,
@@ -355,8 +413,24 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
-
+    from cs336_basics.nn import TransformerLM
+    model=TransformerLM(vocab_size,context_length,d_model,num_layers,num_heads,d_ff,rope_theta,device=in_indices.device,dtype=torch.float32)
+    model.token_embeddings.weight.data.copy_(weights["token_embeddings.weight"])
+    model.ln_final.weight.data.copy_(weights["ln_final.weight"])
+    model.lm_head.weight.data.copy_(weights["lm_head.weight"])
+    for i in range(num_layers):
+        layer=model.layers[i]
+        prefix=f"layers.{i}."
+        layer.attn.q_proj.weight.data.copy_(weights[f"{prefix}attn.q_proj.weight"])
+        layer.attn.k_proj.weight.data.copy_(weights[f"{prefix}attn.k_proj.weight"])
+        layer.attn.v_proj.weight.data.copy_(weights[f"{prefix}attn.v_proj.weight"])
+        layer.attn.output_proj.weight.data.copy_(weights[f"{prefix}attn.output_proj.weight"])
+        layer.ln1.weight.data.copy_(weights[f"{prefix}ln1.weight"])
+        layer.ffn.w1.weight.data.copy_(weights[f"{prefix}ffn.w1.weight"])
+        layer.ffn.w2.weight.data.copy_(weights[f"{prefix}ffn.w2.weight"])
+        layer.ffn.w3.weight.data.copy_(weights[f"{prefix}ffn.w3.weight"])
+        layer.ln2.weight.data.copy_(weights[f"{prefix}ln2.weight"])
+    return model(in_indices)
 
 def run_rmsnorm(
     d_model: int,
@@ -378,7 +452,10 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+    from cs336_basics.nn import RMSNorm
+    rmsnorm=RMSNorm(eps=eps,d_model=d_model)
+    rmsnorm.load_state_dict({"weight": weights})
+    return rmsnorm(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
@@ -392,7 +469,8 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    from cs336_basics.nn import silu_fn
+    return silu_fn(in_features)
 
 
 def run_get_batch(
@@ -431,7 +509,8 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
-    raise NotImplementedError
+    from cs336_basics.nn import softmax
+    return softmax(in_features,dim=dim)
 
 
 def run_cross_entropy(
@@ -589,4 +668,9 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    raise NotImplementedError
+    import cs336_basics.bpe
+    return cs336_basics.bpe.train_bpe(
+        input_path=input_path,
+        vocab_size=vocab_size,
+        special_tokens=special_tokens
+    )
