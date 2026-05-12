@@ -173,13 +173,12 @@ def save_tokenizer_files(vocab, merges, out_dir):
             f.write(f"{s1} {s2}\n")
 
 def main():
-    input_path = "data/TinyStoriesV2-GPT4-train.txt" 
-    vocab_size = 10000 #词表大小
-    
-    special_tokens = ["<|endoftext|>"]
-    output_dir = "data/TinyStoriesV2-GPT4-train"
-
-    print(f"开始训练 BPE 分词器 (目标词表大小: {vocab_size})...")
+    import sys
+    input_path = sys.argv[1] if len(sys.argv) > 1 else 'data/owt_train.txt'
+    vocab_size = int(sys.argv[2]) if len(sys.argv) > 2 else 10000
+    special_tokens = ['<|endoftext|>']
+    output_dir = sys.argv[3] if len(sys.argv) > 3 else 'data/owt_out'
+    print(f'Start {vocab_size}...')
     print("这可能需要几分钟，具体取决于你的 CPU 速度和倒排索引的效率。")
 
     vocab, merges = train_bpe(input_path, vocab_size, special_tokens)
